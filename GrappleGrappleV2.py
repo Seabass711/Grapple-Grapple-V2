@@ -5,9 +5,13 @@ from sys import exit
 import math
 
 pg.init()
+pg.font.init()
+
+#Font Initialisation
+text = pg.font.SysFont('Comic Sans MS', 30)
 
 #Clock Initialisation
-clock = pg.Clock
+clock = pg.time.Clock()
 prevT = 0
 
 #Screen Initialisation
@@ -19,15 +23,17 @@ pg.display.set_caption("Grapple Grapple v2")
 screen.fill((0,0,0))
 
 #Physics Variables
-DAMPING = 10
-HOOKDAMPING = 1000
+DAMPING = 1
+HOOKDAMPING = 0.005
 HOOKBASELENGTH = 100
-GRAVITY = 5
-SPEED = 3
-JUMP = 0.4
+GRAVITY = 800
+SPEED = 500
+JUMP = 500
 xVel = 0
 yVel = 0
-speed = 0.01
+speed = 3600
+hooking = False
+touchingGround = False
 
 #Movemap courtesy of stack overflow
 move_map = {pg.K_w: 'up',
@@ -92,7 +98,7 @@ def renderScreen(objects):
 
     pg.draw.rect(screen, (255,255,255), [100,50,600,500], 1)
     for object in objects:
-        if object.shape == 'line':
+        if object.shape == 'line' and hooking:
             pg.draw.line(object.canvas, object.colour, object.pos1, object.pos2, object.width)
         if object.shape == 'rect':
             pg.draw.rect(object.params[0], object.params[1], centralise(object.params[2]))
@@ -100,6 +106,9 @@ def renderScreen(objects):
             pg.draw.circle(object.params[0], object.params[1],object.params[2],object.params[3])
         if object.shape == 'polygon':
             pg.draw.polygon(object.params[0], object.params[1], object.params[2])
+    screen.blit(text.render('Score: ' + str(score), False, (255,255,255)), (0,0))
+    if speeding:
+        screen.blit(text.render('Speeding Up!', False, (255, 0, 0)), (400, 300))
 
     pg.display.update()
 
@@ -113,7 +122,7 @@ def updateNode(position):
 def hookPull(xVel,yVel, playerCoords, hookCoords):
     xDifference = abs(hookCoords[0] - playerCoords[0])
     yDifference = abs(hookCoords[1] - playerCoords[1])
-    magnitude = math.ceil(math.sqrt(xDifference ** 2 + yDifference ** 2) / HOOKDAMPING * 10)
+    magnitude = math.ceil(math.sqrt(xDifference ** 2 + yDifference ** 2) * deltaTime)
     if HOOKBASELENGTH**2 > xDifference**2 + yDifference**2:
         xDifference, yDifference = 0, 0
     xDifference, yDifference = math.cbrt(xDifference), math.cbrt(yDifference)
@@ -123,9 +132,9 @@ def hookPull(xVel,yVel, playerCoords, hookCoords):
         yDifference *= -1
     xDifference /= HOOKDAMPING
     yDifference /= HOOKDAMPING
-    hookLine.updateWidth(1+magnitude)
-    xVel += xDifference
-    yVel += yDifference
+    hookLine.updateWidth((1+magnitude))
+    xVel += xDifference*deltaTime
+    yVel += yDifference*deltaTime
     return xVel, yVel
 
 #Normalise playerPos to its centre, (0,0)
@@ -141,15 +150,25 @@ def centralise(list):
 def enemyMovement(enemyPos, playerPos):
     xOffset = -enemyPos[0] + playerPos[0]
     yOffset = -enemyPos[1] + playerPos[1]
-    xYRatio = yOffset/xOffset
-    xTransform = math.sqrt(speed/((xYRatio**2)+1))
+    if xOffset != 0:
+        xYRatio = yOffset/xOffset
+    else:
+        xYRatio = yOffset/0.0001
+    xTransform = math.sqrt(speed/((xYRatio**2)+1)) * deltaTime
     if xOffset < 0:
         xTransform *= -1
     yTransform = xYRatio * xTransform
     return xTransform, yTransform
 
+def speedUp(speed):
+    return speed + 600
+
 def endGame():
+    score = 0
+    speed = 0.01
     print('You lost', player.getCoords())
+    player.goto(30,30)
+    enemy.goto(400,300)
 #Line Initialisation
 hookLine = line('line', screen, (255, 0, 255), [0,0], [0,0], 10)
 screenObjects.append(hookLine)
@@ -169,24 +188,39 @@ screenObjects.append(enemy)
 enemy.goto(400,300)
 
 #Game loop
+score = 0
+tAtLastLoss = 0
 while True:
-    #Sort out the delta time for FPS normalisation
     t = pg.time.get_ticks()
+    clock.tick(60)
+    #Sort out the delta time for FPS normalisation
+    #deltaTime = 1/60
     deltaTime = (t-prevT)/1000
     prevT = t
+
+    score = (t - tAtLastLoss) // 100
+
+    if score % 100 <= 2 and score > 2:
+        speeding = True
+        speed = speedUp(speed)
+    else:
+        speeding = False
     
     #Input handling
     for event in pg.event.get():
         if event.type == pg.QUIT:
             exit()
         if event.type == pg.MOUSEBUTTONDOWN:
-            pass
+            hooking= True
+        if event.type == pg.MOUSEBUTTONUP:
+            hooking=False
         updateNode(pg.mouse.get_pos())
 
     pressed = pg.key.get_pressed()
     move = [move_map[key] for  key in move_map if pressed[key]]
-    if 'up' in move:
-        #yVel = -JUMP
+    if 'up' in move and touchingGround:
+        touchingGround = False
+        yVel = -JUMP
         pass
     if 'down' in move:
         #yVel += 10*deltaTime
@@ -202,23 +236,27 @@ while True:
     xVel *= 1-(DAMPING*deltaTime)
     yVel *= 1-(DAMPING*deltaTime) #This would be for top-down/zero gravity. Here, it acts as 'air resistance'
 
-    xVel, yVel = hookPull(xVel, yVel, player.getCoords(), hookNode.getCoords())
+    if hooking:
+        xVel, yVel = hookPull(xVel, yVel, player.getCoords(), hookNode.getCoords())
 
-    player.move(xVel,yVel)
+    player.move(xVel*deltaTime,yVel*deltaTime)
 
     #Border Handling
-    if player.getCoords()[1] + yVel < 550:
+    if player.getCoords()[1] + (yVel*deltaTime) < 550:
         yVel += (GRAVITY*deltaTime)
+        touchingGround = False
     else:
         yVel = 0
         player.goto(player.getCoords()[0], 550)
-    if player.getCoords()[1] + yVel < 50:
+        touchingGround = True
+    if player.getCoords()[1] + (yVel*deltaTime) < 50:
         yVel = 0
         player.goto(player.getCoords()[0], 50)
-    if player.getCoords()[0] + xVel > 700:
+    if player.getCoords()[0] + (xVel*deltaTime) > 700:
         xVel = 0
         player.goto(700, player.getCoords()[1])
-    if player.getCoords()[0] + xVel < 100:
+    if player.getCoords()[0] + (xVel*deltaTime) < 100:
+        xVel = 0
         player.goto(100, player.getCoords()[1])
 
     #Update Line
@@ -229,14 +267,12 @@ while True:
     #Move Enemy
     enemy.move(enemyMovement(enemy.getCoords(), player.getCoords())[0], enemyMovement(enemy.getCoords(), player.getCoords())[1])
 
-    
     #Collision Testing
     mpos = pg.mouse.get_pos()
     playerHitbox = pg.draw.rect(screen,(0,0,0) , (player.getCoords()[0],player.getCoords()[1], 10, 10))
     enemyHitbox = pg.draw.circle(screen, (0,0,0) ,(enemy.getCoords()[0], enemy.getCoords()[1]), 10)
     if playerHitbox.colliderect(enemyHitbox):
         endGame()
+        tAtLastLoss = pg.time.get_ticks()
 
     renderScreen(screenObjects)
-
-
