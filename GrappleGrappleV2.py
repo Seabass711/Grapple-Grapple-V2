@@ -27,6 +27,7 @@ SPEED = 3
 JUMP = 0.4
 xVel = 0
 yVel = 0
+speed = 0.01
 
 #Movemap courtesy of stack overflow
 move_map = {pg.K_w: 'up',
@@ -46,6 +47,19 @@ class object():
         self.params[2][1] = y
     def getCoords(self):
         return(self.params[2][0],self.params[2][1])
+
+class polygon(object):
+    def move(self,xOffset,yOffset):
+        for a in range(len(self.params[2])):
+            self.params[2][a][0] += xOffset
+            self.params[2][a][1] += yOffset
+    def goto(self,x,y):
+        xOffset = x - self.params[2][0][0]
+        yOffset = y - self.params[2][0][1]
+        self.move(xOffset, yOffset)
+
+    def getCoords(self):
+        return(self.params[2][0])
 
 class line(object):
     def __init__(self, shape, canvas, colour, pos1, pos2, width):
@@ -70,10 +84,12 @@ class line(object):
 #'Square': Canvas, Colour(a,b,c), Positon and Dimensions[x,y,w,h]
 #'Circle': Canvas, Colour(a,b,c), position[x,y], radius(r)
 #'Line': Canvas, Colour(a,b,c), pos1[x,y], pos2[x,y], width
+#'Polygon': Canvass Colour(a,b,c), points...
 
 #Screen Rendering
 def renderScreen(objects):
     screen.fill((0,0,0))
+
     pg.draw.rect(screen, (255,255,255), [100,50,600,500], 1)
     for object in objects:
         if object.shape == 'line':
@@ -82,6 +98,8 @@ def renderScreen(objects):
             pg.draw.rect(object.params[0], object.params[1], centralise(object.params[2]))
         if object.shape == 'circle':
             pg.draw.circle(object.params[0], object.params[1],object.params[2],object.params[3])
+        if object.shape == 'polygon':
+            pg.draw.polygon(object.params[0], object.params[1], object.params[2])
 
     pg.display.update()
 
@@ -120,6 +138,18 @@ def centralise(list):
     posY = y - height/2
     return posX, posY, width, height
 
+def enemyMovement(enemyPos, playerPos):
+    xOffset = -enemyPos[0] + playerPos[0]
+    yOffset = -enemyPos[1] + playerPos[1]
+    xYRatio = yOffset/xOffset
+    xTransform = math.sqrt(speed/((xYRatio**2)+1))
+    if xOffset < 0:
+        xTransform *= -1
+    yTransform = xYRatio * xTransform
+    return xTransform, yTransform
+
+def endGame():
+    print('You lost', player.getCoords())
 #Line Initialisation
 hookLine = line('line', screen, (255, 0, 255), [0,0], [0,0], 10)
 screenObjects.append(hookLine)
@@ -132,6 +162,11 @@ screenObjects.append(player)
 hookNode = object('circle', screen, (255, 255, 255),[400,300],10)
 screenObjects.append(hookNode)
 
+#Enemy Initialisation
+enemy = polygon('polygon', screen, (100, 50, 135), [[40,30],[60,40],[50,30],[60,20]])
+screenObjects.append(enemy)
+
+enemy.goto(400,300)
 
 #Game loop
 while True:
@@ -191,4 +226,17 @@ while True:
     hookPos = hookNode.getCoords()
     hookLine.goto(playerPos, hookPos)
 
+    #Move Enemy
+    enemy.move(enemyMovement(enemy.getCoords(), player.getCoords())[0], enemyMovement(enemy.getCoords(), player.getCoords())[1])
+
+    
+    #Collision Testing
+    mpos = pg.mouse.get_pos()
+    playerHitbox = pg.draw.rect(screen,(0,0,0) , (player.getCoords()[0],player.getCoords()[1], 10, 10))
+    enemyHitbox = pg.draw.circle(screen, (0,0,0) ,(enemy.getCoords()[0], enemy.getCoords()[1]), 10)
+    if playerHitbox.colliderect(enemyHitbox):
+        endGame()
+
     renderScreen(screenObjects)
+
+
