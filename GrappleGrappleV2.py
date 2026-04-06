@@ -4,6 +4,8 @@ from sys import exit
 
 import math
 
+import random
+
 pg.init()
 pg.font.init()
 
@@ -16,6 +18,7 @@ prevT = 0
 
 #Screen Initialisation
 screenObjects = []
+screenParticles = []
 screenWidth = 800
 screenHeight = 600
 screen = pg.display.set_mode((screenWidth, screenHeight))
@@ -34,6 +37,9 @@ yVel = 0
 speed = 3600
 hooking = False
 touchingGround = False
+touchingWall = False
+
+pi=3.1415926
 
 #Movemap courtesy of stack overflow
 move_map = {pg.K_w: 'up',
@@ -59,6 +65,21 @@ class polygon(object):
         for a in range(len(self.params[2])):
             self.params[2][a][0] += xOffset
             self.params[2][a][1] += yOffset
+    def setRotate(self, angle):
+        #Currently this only functions for the 'pointer' enemy design I've created.
+        base = self.getCoords()
+        #self.params[2][0][0] = base[0] + 10*math.cos(angle)
+        #self.params[2][0][1] = base[1] + 10*math.sin(angle)
+
+        self.params[2][1][0] = base[0] + 20* math.cos(angle-(3*pi/4))
+        self.params[2][1][1] = base[1] + 20* math.sin(angle-(3*pi/4))
+
+        self.params[2][2][0] = base[0] + 10*math.cos(angle + pi)
+        self.params[2][2][1] = base[1] + 10*math.sin(angle + pi)
+
+        self.params[2][3][0] = base[0] + 20*math.cos(angle+(3*pi/4))
+        self.params[2][3][1] = base[1] + 20* math.sin(angle+(3*pi/4))
+
     def goto(self,x,y):
         xOffset = x - self.params[2][0][0]
         yOffset = y - self.params[2][0][1]
@@ -86,6 +107,32 @@ class line(object):
     def updateWidth(self, newWidth):
         self.width = newWidth
 
+class particle():
+    def __init__(self, colour, size, posX, posY, velX, velY):
+        self.colour = colour
+        self.size = size
+        self.posX = posX
+        self.posY = posY
+        self.velX = velX
+        self.velY = velY
+    def __delete__(self):
+        print(':(')
+    def render(self):
+        pg.draw.rect(screen, self.colour, (self.posX,self.posY,self.size,self.size))
+    def move(self):
+        self.posX += self.velX * deltaTime
+        self.posY += self.velY * deltaTime
+    def physics(self):
+        self.velX *= 1-(DAMPING*deltaTime)
+        self.velY *= 1-(DAMPING*deltaTime)
+        self.velY += GRAVITY * deltaTime
+    def update(self):
+        self.physics()
+        self.move()
+        self.render()
+    
+    
+
 #'Objects' to be written in form [shape, paramaters]
 #'Square': Canvas, Colour(a,b,c), Positon and Dimensions[x,y,w,h]
 #'Circle': Canvas, Colour(a,b,c), position[x,y], radius(r)
@@ -106,9 +153,12 @@ def renderScreen(objects):
             pg.draw.circle(object.params[0], object.params[1],object.params[2],object.params[3])
         if object.shape == 'polygon':
             pg.draw.polygon(object.params[0], object.params[1], object.params[2])
+    for particle in screenParticles:
+        particle.update()
     screen.blit(text.render('Score: ' + str(score), False, (255,255,255)), (0,0))
+    screen.blit(text.render('Highscore: ' + str(highScore), False, (0,255,255)), (0,550))
     if speeding:
-        screen.blit(text.render('Speeding Up!', False, (255, 0, 0)), (400, 300))
+        screen.blit(text.render('Speeding Up!', False, (255, 0, 0)), (300, 300))
 
     pg.display.update()
 
@@ -122,7 +172,7 @@ def updateNode(position):
 def hookPull(xVel,yVel, playerCoords, hookCoords):
     xDifference = abs(hookCoords[0] - playerCoords[0])
     yDifference = abs(hookCoords[1] - playerCoords[1])
-    magnitude = math.ceil(math.sqrt(xDifference ** 2 + yDifference ** 2) * deltaTime)
+    magnitude = math.ceil(math.sqrt(xDifference ** 2 + yDifference ** 2)*1/60)
     if HOOKBASELENGTH**2 > xDifference**2 + yDifference**2:
         xDifference, yDifference = 0, 0
     xDifference, yDifference = math.cbrt(xDifference), math.cbrt(yDifference)
@@ -147,6 +197,19 @@ def centralise(list):
     posY = y - height/2
     return posX, posY, width, height
 
+def findAngle(pos1, pos2):
+    xOffset = pos2[0] - pos1[0]
+    yOffset = pos2[1] - pos1[1]
+    if xOffset == 0:
+        if yOffset < 0:
+            return -pi
+        else:
+            return pi
+    if xOffset < 0:
+        return pi + math.atan(yOffset/xOffset)
+    else:
+        return math.atan(yOffset/xOffset)
+
 def enemyMovement(enemyPos, playerPos):
     xOffset = -enemyPos[0] + playerPos[0]
     yOffset = -enemyPos[1] + playerPos[1]
@@ -160,12 +223,26 @@ def enemyMovement(enemyPos, playerPos):
     yTransform = xYRatio * xTransform
     return xTransform, yTransform
 
+#Wallhit particles: 0-Top 1-Right 2-Bottom 3-Left
+def wallHit(wall):
+    if wall == 0:
+        return random.randint(-200,200), random.randint(0,250)
+    if wall == 1:
+        return random.randint(-200,0), random.randint(-500, 0)
+    if wall == 2:
+        return random.randint(-200,200), random.randint(-500,0)
+    if wall == 3:
+        return random.randint(0,200), random.randint(-500, 0)
+    else:
+        return 0,0
+
 def speedUp(speed):
-    return speed + 600
+    return speed + 60000*deltaTime
 
 def endGame():
+    global speed, score
     score = 0
-    speed = 0.01
+    speed = 3600
     print('You lost', player.getCoords())
     player.goto(30,30)
     enemy.goto(400,300)
@@ -181,24 +258,27 @@ screenObjects.append(player)
 hookNode = object('circle', screen, (255, 255, 255),[400,300],10)
 screenObjects.append(hookNode)
 
-#Enemy Initialisation
-enemy = polygon('polygon', screen, (100, 50, 135), [[40,30],[60,40],[50,30],[60,20]])
+#Enemy Initialisation #
+enemy = polygon('polygon', screen, (100, 50, 135), [[40,30],[20,40],[30,30],[20,20]])
 screenObjects.append(enemy)
 
 enemy.goto(400,300)
 
 #Game loop
 score = 0
+highScore = 0
 tAtLastLoss = 0
 while True:
     t = pg.time.get_ticks()
-    clock.tick(60)
+    clock.tick(120)
     #Sort out the delta time for FPS normalisation
     #deltaTime = 1/60
     deltaTime = (t-prevT)/1000
     prevT = t
 
     score = (t - tAtLastLoss) // 100
+    if score > highScore:
+        highScore = score
 
     if score % 100 <= 2 and score > 2:
         speeding = True
@@ -223,7 +303,7 @@ while True:
         yVel = -JUMP
         pass
     if 'down' in move:
-        #yVel += 10*deltaTime
+        yVel += 1000*deltaTime
         pass
     if 'left' in move:
         xVel -= SPEED*deltaTime
@@ -248,16 +328,39 @@ while True:
     else:
         yVel = 0
         player.goto(player.getCoords()[0], 550)
+        if not touchingWall:
+            for x in range(10000, 10000+random.randint(5,10)):
+                x = particle((255,255,255), random.randint(1,3), player.getCoords()[0], player.getCoords()[1], wallHit(2)[0], wallHit(2)[1])
+                screenParticles.append(x)
+            touchingWall = True
         touchingGround = True
     if player.getCoords()[1] + (yVel*deltaTime) < 50:
+        if not touchingWall:
+            for x in range(10000, 10000+random.randint(5,10)):
+                x = particle((255,255,255), random.randint(1,3), player.getCoords()[0], player.getCoords()[1], wallHit(0)[0], wallHit(0)[1])
+                screenParticles.append(x)
+            touchingWall = True
         yVel = 0
         player.goto(player.getCoords()[0], 50)
     if player.getCoords()[0] + (xVel*deltaTime) > 700:
+        if not touchingWall:
+            for x in range(10000, 10000+random.randint(5,10)):
+                x = particle((255,255,255), random.randint(1,3), player.getCoords()[0], player.getCoords()[1], wallHit(1)[0], wallHit(1)[1])
+                screenParticles.append(x)
+            touchingWall = True
         xVel = 0
         player.goto(700, player.getCoords()[1])
     if player.getCoords()[0] + (xVel*deltaTime) < 100:
+        if not touchingWall:
+            for x in range(10000, 10000+random.randint(5,10)):
+                x = particle((255,255,255), random.randint(1,3), player.getCoords()[0], player.getCoords()[1], wallHit(3)[0], wallHit(3)[1])
+                screenParticles.append(x)
+            touchingWall = True
         xVel = 0
         player.goto(100, player.getCoords()[1])
+
+    if xVel != 0 and yVel != 0:
+        touchingWall = False
 
     #Update Line
     playerPos = player.getCoords()
@@ -266,12 +369,18 @@ while True:
 
     #Move Enemy
     enemy.move(enemyMovement(enemy.getCoords(), player.getCoords())[0], enemyMovement(enemy.getCoords(), player.getCoords())[1])
+    #enemy.setRotate(score / 10) #For testing purposes
+    enemy.setRotate(findAngle(enemy.getCoords(), player.getCoords()))
 
     #Collision Testing
     mpos = pg.mouse.get_pos()
     playerHitbox = pg.draw.rect(screen,(0,0,0) , (player.getCoords()[0],player.getCoords()[1], 10, 10))
-    enemyHitbox = pg.draw.circle(screen, (0,0,0) ,(enemy.getCoords()[0], enemy.getCoords()[1]), 10)
+    enemyHitbox = pg.draw.circle(screen, (0,0,0) ,(enemy.getCoords()[0], enemy.getCoords()[1]), 5)
     if playerHitbox.colliderect(enemyHitbox):
+        for x in range(random.randint(20,30)):
+            x = particle((255,255,0), random.randint(1,5), player.getCoords()[0], player.getCoords()[1], random.randint(-400,400), random.randint(-1000,0))
+            screenParticles.append(x)
+            
         endGame()
         tAtLastLoss = pg.time.get_ticks()
 
