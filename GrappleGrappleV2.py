@@ -115,8 +115,8 @@ class particle():
         self.posY = posY
         self.velX = velX
         self.velY = velY
-    def __delete__(self):
-        print(':(')
+    def returnY(self):
+        return self.posY
     def render(self):
         pg.draw.rect(screen, self.colour, (self.posX,self.posY,self.size,self.size))
     def move(self):
@@ -155,6 +155,9 @@ def renderScreen(objects):
             pg.draw.polygon(object.params[0], object.params[1], object.params[2])
     for particle in screenParticles:
         particle.update()
+        if particle.returnY() > 600:
+            screenParticles.remove(particle)
+            particle = None
     screen.blit(text.render('Score: ' + str(score), False, (255,255,255)), (0,0))
     screen.blit(text.render('Highscore: ' + str(highScore), False, (0,255,255)), (0,550))
     if speeding:
@@ -251,7 +254,7 @@ hookLine = line('line', screen, (255, 0, 255), [0,0], [0,0], 10)
 screenObjects.append(hookLine)
 
 #Player Initialisation
-player = object('rect', screen, (255, 255, 0), [30,30,10,10])
+player = object('rect', screen, (255, 255, 0), [160,160,10,10])
 screenObjects.append(player)
 
 #HookNode Initialisation
@@ -304,6 +307,7 @@ while True:
         pass
     if 'down' in move:
         yVel += 1000*deltaTime
+        #print(len(screenParticles))
         pass
     if 'left' in move:
         xVel -= SPEED*deltaTime
@@ -332,6 +336,7 @@ while True:
             for x in range(10000, 10000+random.randint(5,10)):
                 x = particle((255,255,255), random.randint(1,3), player.getCoords()[0], player.getCoords()[1], wallHit(2)[0], wallHit(2)[1])
                 screenParticles.append(x)
+                #print('1')
             touchingWall = True
         touchingGround = True
     if player.getCoords()[1] + (yVel*deltaTime) < 50:
@@ -339,6 +344,7 @@ while True:
             for x in range(10000, 10000+random.randint(5,10)):
                 x = particle((255,255,255), random.randint(1,3), player.getCoords()[0], player.getCoords()[1], wallHit(0)[0], wallHit(0)[1])
                 screenParticles.append(x)
+                #print('2')
             touchingWall = True
         yVel = 0
         player.goto(player.getCoords()[0], 50)
@@ -347,6 +353,7 @@ while True:
             for x in range(10000, 10000+random.randint(5,10)):
                 x = particle((255,255,255), random.randint(1,3), player.getCoords()[0], player.getCoords()[1], wallHit(1)[0], wallHit(1)[1])
                 screenParticles.append(x)
+                #print('3')
             touchingWall = True
         xVel = 0
         player.goto(700, player.getCoords()[1])
@@ -355,6 +362,7 @@ while True:
             for x in range(10000, 10000+random.randint(5,10)):
                 x = particle((255,255,255), random.randint(1,3), player.getCoords()[0], player.getCoords()[1], wallHit(3)[0], wallHit(3)[1])
                 screenParticles.append(x)
+                #print('4')
             touchingWall = True
         xVel = 0
         player.goto(100, player.getCoords()[1])
@@ -380,6 +388,7 @@ while True:
         for x in range(random.randint(20,30)):
             x = particle((255,255,0), random.randint(1,5), player.getCoords()[0], player.getCoords()[1], random.randint(-400,400), random.randint(-1000,0))
             screenParticles.append(x)
+            #print('5')
             
         endGame()
         tAtLastLoss = pg.time.get_ticks()
